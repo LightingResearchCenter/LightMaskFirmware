@@ -3,6 +3,12 @@
 // November 16, 2012; Revised February 14, 2013
 // Revised May 01, 2013 Fixed getCalRight command (was calLeft for both sides) line 435
 
+// Major revision 16-May-2014
+// Added check battery command which uses ADC to measure battery voltage
+// Added LED current monitoring and saving to MSP430 flash
+//   Added functions that read ADC and saves results, along with date-time stamps, to flash memory
+//   Added function that erases block C of flash
+
 #include "USB_API/USB_Common/device.h"
 #include "USB_API/USB_Common/types.h"
 #include "USB_config/descriptors.h"
