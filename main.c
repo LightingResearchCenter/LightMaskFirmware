@@ -43,6 +43,7 @@ int flashFlag = 0;
 int batteryFlag = 0; 		// Is the 20V battery connected?
 int batteryEventFlag = 0; 	// Battery interrupt on P1.3
 
+
 // Initialize segment D flash with on_Times and offTimes
 #pragma DATA_SECTION (initParam, "INFO_SEGMENT_D1");
 const unsigned int initParam[5] = {900, 50, 10, 262, 262};
@@ -64,15 +65,16 @@ const Calendar initTimes[14] =  {{0,1,12,0,7,1,2013},
 
 
 void main(void) {
-	char pieceOfString[MAX_STR_LENGTH] = "";    // Holds the new addition to the string
-	char outString[MAX_STR_LENGTH] = "";        // Holds the outgoing string
-	char wholeString[MAX_STR_LENGTH] = "";     	// The entire input string from the last 'return'
+	static char pieceOfString[MAX_STR_LENGTH] = "";    // Holds the new addition to the string
+	static char outString[MAX_STR_LENGTH] = "";        // Holds the outgoing string
+	static char wholeString[MAX_STR_LENGTH] = "";     	// The entire input string from the last 'return'
 	char * subStr; 						// Holds the 8 character command part of the received string
-	char monthStr[3], dayStr[3], hoursStr[3], minutesStr[3],secondsStr[3]; 	// for printing the time
-	char parameterStr[6]; 							// for printing pulseDur, pulseInt, pulseRep
-	int index,i = 0;
+	static char monthStr[3], dayStr[3], hoursStr[3], minutesStr[3],secondsStr[3]; 	// for printing the time
+	static char parameterStr[6]; 							// for printing pulseDur, pulseInt, pulseRep
+	int n,index,i = 0,j;
 	char badCommand = FALSE;
-	unsigned int WperSqM = 0, milliSec = 1000;
+	static unsigned int WperSqM = 0, milliSec = 1000;
+	static int LEDOn = 0,LEDOnPrev = 0;
 
 	//wdOff();
 	wdReset_16000(); 		// Reset watchdog timer for 16 second interval
@@ -82,6 +84,7 @@ void main(void) {
 	setRTC(); 				// Setup the RTC, Set time to currentTime. Commented-out temporary time set for testing
 	//Init_Alarm(); 			// Initialize array of alarm times ***** Remove/change so that updated alarm values are used ****
 	initFromFlash(); 		// Initialize parameters and alarm times from info flash (segment D)
+	findNextAddrBankB(); 	// Find flash memory location where next LED current measure is saved
 	i2cActivate(); 			// set up IO pins and clock for I2C communication with DAC
 	nextAlarm = findNextOnAlarmIndex(numAlarms);
 	setAlarm(nextAlarm);
@@ -120,6 +123,9 @@ void main(void) {
 		P1IFG &= ~0x04;       	// P1.2 IFG cleared
 		P1OUT |= 0x02; 			// Switch on battery MOSFET (set P1.1 high)
 	}
+
+	checkLEDCurrent();
+
 	while(1){
 	    switch(USB_connectionState()){
 	        case ST_USB_DISCONNECTED:
@@ -135,16 +141,24 @@ void main(void) {
 	        		if (flashFlag){
 	        			P1OUT |= 0x01; 			// turn on LED on port 1.0
 	        			writeDAC(pulseInt); 	// turn LED mask on by programming DAC to pulseInt
+	        			LEDOn = 1;
 	        		}
 	        		else{
 	        			P1OUT &= ~0x01; // turn off LED on port 1.0
 	        			writeDAC(0); 	// turn LED mask off by programming DAC to zero
+	        			LEDOn = 0;
+	        		}
+	        		if(LEDOn != LEDOnPrev){
+	        			for(i=0;i<20000;i++); // delay for approximately 2.5 ms
+	        			checkLEDCurrent();
+	        			LEDOnPrev = LEDOn;
 	        		}
 	        	}
 	        	else{
 	        		P1OUT &= ~0x01; // turn off LED on port 1.0
 	        		writeDAC(0); 	// turn LED mask off by programming DAC to zero
 	        		if(USBtiming==0) batterySwitchIdle(0); 	// Switch off battery to save charge only if not connected to USB
+	        		LEDOn = 0;
 	        	}
 	        	break;
 
@@ -169,6 +183,7 @@ void main(void) {
 	                		outString[i] = 0x00;
 	                		pieceOfString[i] = 0x00;
 	                	}
+	                	while(1){ 	// Construct a dummy loop so that a break statement can be used to avoid testing all the if statements after the command is found
 	                	if(!(strcmp(subStr, "setClock"))){
 	                		subStr = strtok (NULL, ":,-"); 	// strtok function remembers pointer location from previous call
 	                		if (subStr != NULL) currentTime.Year = Ascii2Num(subStr);
@@ -198,8 +213,9 @@ void main(void) {
 	                			//hidSendDataInBackground((BYTE*)outString,strlen(outString),HID0_INTFNUM,0);
 	                			hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
 	                		}
+	                		break;
 	                    }
-	                    else if(!(strcmp(subStr, "getClock"))){
+	                    if(!(strcmp(subStr, "getClock"))){
 	                    	currentTime = RTC_getCalendarTime();
 	                    	num2ASCII((unsigned int)(currentTime.Month),monthStr,2);
 	                    	num2ASCII((unsigned int)(currentTime.DayOfMonth),dayStr,2);
@@ -221,8 +237,9 @@ void main(void) {
 
 	                        //hidSendDataInBackground((BYTE*)outString,strlen(outString),HID0_INTFNUM,0);
 	                        hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
+	                        break;
 	                    }
-	                    else if(!(strcmp(subStr, "on_Times"))){
+	                    if(!(strcmp(subStr, "on_Times"))){
 	                    	subStr = strtok (NULL, ":,-"); 	// strtok function remembers pointer location from previous call
 	                    	if (subStr !=NULL) index = Ascii2Num(subStr);
 	                    	subStr = strtok (NULL, ":,-"); 	// strtok function remembers pointer location from previous call
@@ -253,8 +270,9 @@ void main(void) {
 	                			//hidSendDataInBackground((BYTE*)outString,strlen(outString),HID0_INTFNUM,0);
 	                			hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
 	                		}
+	                		break;
 	                    }
-	                    else if(!(strcmp(subStr, "offTimes"))){
+	                   if(!(strcmp(subStr, "offTimes"))){
 	                    	subStr = strtok (NULL, ":,-"); 	// strtok function remembers pointer location from previous call
 	                    	if (subStr !=NULL) index = Ascii2Num(subStr);
 	                    	subStr = strtok (NULL, ":,-"); 	// strtok function remembers pointer location from previous call
@@ -284,8 +302,9 @@ void main(void) {
 	                    		//hidSendDataInBackground((BYTE*)outString,strlen(outString),HID0_INTFNUM,0);
 	                    		hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
 	                    	}
+	                    	break;
 	                    }
-	                    else if(!(strcmp(subStr, "pulseDur"))){
+	                    if(!(strcmp(subStr, "pulseDur"))){
 	                    	subStr = strtok (NULL, ":,-"); 	// strtok function remembers pointer location from previous call
 	                    	if (subStr != NULL) pulseDur = (unsigned int)Ascii2Num(subStr);
 	                    	if (pulseDur > PULSE_DUR_LIMIT) pulseDur = PULSE_DUR_LIMIT;
@@ -296,8 +315,9 @@ void main(void) {
 	                    	strcat(outString,"\r\n");
 	                    	//hidSendDataInBackground((BYTE*)outString,strlen(outString),HID0_INTFNUM,0);
 	                    	hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
+	                    	break;
 	                    }
-	                    else if(!(strcmp(subStr, "pulseRep"))){
+	                    if(!(strcmp(subStr, "pulseRep"))){
 	                    	subStr = strtok (NULL, ":,-"); 	// strtok function remembers pointer location from previous call
 	                    	if (subStr != NULL) pulseRep = Ascii2Num(subStr);
 	                    	if (pulseRep > PULSE_REP_LIMIT_HI) pulseRep = PULSE_REP_LIMIT_HI;
@@ -309,8 +329,9 @@ void main(void) {
 	                    	strcat(outString,"\r\n");
 	                    	//hidSendDataInBackground((BYTE*)outString,strlen(outString),HID0_INTFNUM,0);
 	                    	hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
+	                    	break;
 	                    }
-	                    else if(!(strcmp(subStr, "pulseInt"))){
+	                    if(!(strcmp(subStr, "pulseInt"))){
 	                    	subStr = strtok (NULL, ":,-"); 	// strtok function remembers pointer location from previous call
 	                    	if (subStr != NULL) pulseInt = Ascii2Num(subStr);
 	                    	if (pulseInt > PULSE_INT_LIMIT) pulseInt = PULSE_INT_LIMIT;
@@ -321,8 +342,9 @@ void main(void) {
 	                    	strcat(outString,"\r\n");
 	                    	//hidSendDataInBackground((BYTE*)outString,strlen(outString),HID0_INTFNUM,0);
 	                    	hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
+	                    	break;
 	                    }
-	                    else if(!(strcmp(subStr, "getOn"))){
+	                    if(!(strcmp(subStr, "getOn"))){
 	                    	for(i=0;i<numAlarms;i++){
 	                    		alarmTime = on_Times[i];
 	                    		num2ASCII((unsigned int)(alarmTime.DayOfMonth),dayStr,2);
@@ -340,8 +362,9 @@ void main(void) {
 	                    		//strcat(outString,"\r\n");
 	                    		hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
 	                    	}
+	                    	break;
 	                    }
-	                    else if(!(strcmp(subStr, "getOff"))){
+	                    if(!(strcmp(subStr, "getOff"))){
 	                    	for(i=0;i<numAlarms;i++){
 	                    		alarmTime = offTimes[i];
 	                    		num2ASCII((unsigned int)(alarmTime.DayOfMonth),dayStr,2);
@@ -359,33 +382,36 @@ void main(void) {
 	                    		//strcat(outString,"\r\n");
 	                    		hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
 	                    	}
+	                    	break;
 	                    }
-	                    else if(!(strcmp(subStr, "getInt"))){
+	                    if(!(strcmp(subStr, "getInt"))){
 	                    	num2ASCII(pulseInt,parameterStr,4);
 	                    	strcpy(outString,"\r\npulseInt set to ");
 	                    	strcat(outString,parameterStr);         // Prepare the outgoing string
 	                    	strcat(outString,"W/m^2\r\n");
 	                    	//hidSendDataInBackground((BYTE*)outString,strlen(outString),HID0_INTFNUM,0);
 	                    	hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
+	                    	break;
 	                    }
-	                    else if(!(strcmp(subStr, "getDur"))){
+	                    if(!(strcmp(subStr, "getDur"))){
 	                    	num2ASCII(pulseDur,parameterStr,4);
 	                    	strcpy(outString,"\r\npulseDur set to ");
 	                    	strcat(outString,parameterStr);         // Prepare the outgoing string
 	                    	strcat(outString,"milliseconds\r\n");
 	                    	//hidSendDataInBackground((BYTE*)outString,strlen(outString),HID0_INTFNUM,0);
 	                    	hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
+	                    	break;
 	                    }
-	                    else if(!(strcmp(subStr, "getRep"))){
+	                    if(!(strcmp(subStr, "getRep"))){
 	                    	num2ASCII(pulseRep,parameterStr,4);
 	                    	strcpy(outString,"\r\npulseRep set to ");
 	                    	strcat(outString,parameterStr);         // Prepare the outgoing string
 	                    	strcat(outString,"seconds\r\n");
 	                    	//hidSendDataInBackground((BYTE*)outString,strlen(outString),HID0_INTFNUM,0);
 	                    	hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
-
+	                    	break;
 	                    }
-	                    else if(!(strcmp(subStr,"calLeft"))){
+	                    if(!(strcmp(subStr,"calLeft"))){
 	                    	subStr = strtok (NULL, ":,-"); 	// strtok function remembers pointer location from previous call
 	                    	if (subStr != NULL) calLeft = Ascii2Num(subStr);
 	                    	flashWriteUnsignedInt(3, calLeft); 		// position 3
@@ -395,8 +421,9 @@ void main(void) {
 	                    	strcat(outString,"\r\n");
 	                    	//hidSendDataInBackground((BYTE*)outString,strlen(outString),HID0_INTFNUM,0);
 	                    	hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
+	                    	break;
 	                    }
-	                    else if(!(strcmp(subStr,"calRight"))){
+	                    if(!(strcmp(subStr,"calRight"))){
 	                    	subStr = strtok (NULL, ":,-"); 	// strtok function remembers pointer location from previous call
 	                    	if (subStr != NULL) calRight = Ascii2Num(subStr);
 	                    	flashWriteUnsignedInt(4, calRight); 		// position 4
@@ -406,8 +433,9 @@ void main(void) {
 	                    	strcat(outString,"\r\n");
 	                    	//hidSendDataInBackground((BYTE*)outString,strlen(outString),HID0_INTFNUM,0);
 	                    	hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
+	                    	break;
 	                    }
-	                    else if(!(strcmp(subStr,"calFlash"))){
+	                    if(!(strcmp(subStr,"calFlash"))){
 	                		subStr = strtok (NULL, ":,-"); 	// strtok function remembers pointer location from previous call
 	                		if (subStr != NULL) WperSqM = Ascii2Num(subStr);
 	                		subStr = strtok (NULL, ":,-"); 	// strtok function remembers pointer location from previous call
@@ -422,27 +450,83 @@ void main(void) {
 	                    	strcat(outString,"\r\n");
 	                    	//hidSendDataInBackground((BYTE*)outString,strlen(outString),HID0_INTFNUM,0);
 	                    	hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
+	                    	break;
 	                    }
-	                    else if(!(strcmp(subStr, "getCalLeft"))){
+	                    if(!(strcmp(subStr, "getCalLeft"))){
 	                    	num2ASCII(calLeft,parameterStr,4);
 	                    	strcpy(outString,"\r\ncalLeft set to ");
 	                    	strcat(outString,parameterStr);         // Prepare the outgoing string
 	                    	strcat(outString,"W/m^2 per step\r\n");
 	                    	//hidSendDataInBackground((BYTE*)outString,strlen(outString),HID0_INTFNUM,0);
 	                    	hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
+	                    	break;
 	                    }
-	                    else if(!(strcmp(subStr, "getCalRight"))){
+	                    if(!(strcmp(subStr, "getCalRight"))){
 	                    	num2ASCII(calRight,parameterStr,4);
 	                    	strcpy(outString,"\r\ncalRight set to ");
 	                    	strcat(outString,parameterStr);         // Prepare the outgoing string
 	                    	strcat(outString,"W/m^2 per step\r\n");
 	                    	//hidSendDataInBackground((BYTE*)outString,strlen(outString),HID0_INTFNUM,0);
 	                    	hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
+	                    	break;
 	                    }
-	                    else{                                                      				// Handle other terminated strings
-	                    	strcpy(outString,"\r\nNo such command!\r\n\r\n");                   // Prepare the outgoing string
-	                        hidSendDataInBackground((BYTE*)outString,strlen(outString),0,0);    // Send the response over USB
-	                    }
+	                	if(!(strcmp(subStr, "getLEDCurrentLog"))){
+	                		n = (int)((long int)flashAddressLEDCurrent - MAIN_BANK_C_ADDR)/8;
+	                		static unsigned char* flashAddr = (unsigned char*)MAIN_BANK_C_ADDR;
+	                		flashAddr = (unsigned char*)MAIN_BANK_C_ADDR;
+	                		static unsigned int* flashAddrInt;
+	                		strcpy(outString,"\r\nLED currents\r\n");
+	                		for(i=0;i<n;i++){
+	                			num2ASCII((unsigned int)*flashAddr++,dayStr,2);
+	                		    num2ASCII((unsigned int)*flashAddr++,hoursStr,2);
+	                		    num2ASCII((unsigned int)*flashAddr++,minutesStr,2);
+	                		    num2ASCII((unsigned int)*flashAddr++,secondsStr,2);
+	                		    flashAddrInt = (unsigned int*)flashAddr++;
+	                		    num2ASCII(*flashAddrInt++,parameterStr,4);
+	                		    flashAddr++;
+	                		    strcat(outString,dayStr);
+	                		    strcat(outString,",");
+	                		    strcat(outString,hoursStr);
+	                		    strcat(outString,",");
+	                		    strcat(outString,minutesStr);
+	                		    strcat(outString,",");
+	                		    strcat(outString,secondsStr);
+	                		    strcat(outString,",");
+	                		    strcat(outString,parameterStr);
+	                		    strcat(outString,",");
+	                		    num2ASCII(*flashAddrInt,parameterStr,4);
+	                		    flashAddr++;
+	                		    flashAddr++; 	// index twice because last two values are integers
+	                		    strcat(outString,parameterStr);
+	                		    strcat(outString,"\r\n");
+	                		    hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
+	                		    for(j=0;j<MAX_STR_LENGTH;j++){    // Clear the string in preparation for the next one
+	                		        outString[j] = 0x00;
+	                		     }
+	                		}
+	                		break;
+	                	}
+	                	if(!(strcmp(subStr, "eraseLEDLog"))){
+	                		strcpy(outString,"\r\nStart erasing log\r\n");
+	                		hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
+	                		flashEraseBankB();
+	                		strcpy(outString,"\r\nLED current log erased\r\n");
+	                		hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
+	                		break;
+	                	}
+	                	if(!(strcmp(subStr, "checkBattery"))){
+	                		num2ASCII(checkBattery(),parameterStr,4);
+	                		strcpy(outString,"\r\nBattery voltage = ");
+	                		strcat(outString,parameterStr);
+	                		strcat(outString," (mV)\r\n");
+	                		hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
+	                		break;
+	                	}
+	                	// Handle other terminated strings
+	                	strcpy(outString,"\r\nNo such command!\r\n\r\n");                   // Prepare the outgoing string
+	                	hidSendDataInBackground((BYTE*)outString,strlen(outString),0,0);    // Send the response over USB
+	                	break;
+	                	} 	// Dummy while loop
 	                    for(i=0;i<MAX_STR_LENGTH;i++){                        // Clear the string in preparation for the next one
 	                    	wholeString[i] = 0x00;
 	                	}
@@ -550,8 +634,9 @@ VOID Init_Ports(VOID)
 	    P5DIR = 0xFF; 	// All outputs
 
 	    P6OUT = 0x00;
-	    P6SEL = 0x00;
-	    P6DIR = 0xFF;
+	    P6SEL |= 0x03; 	// Enable A/D channel A0, A1
+	    //P6SEL = 0x00;
+	    P6DIR = 0xFC; 	// P6.0 and P6.1 are inputs, all others are outputs
 	    //P6SEL = 0x07; 	// P6.0, P6.1, P6.2, P6.3, P6.4 selected for analog inputs A0, A1, A2, A3, A4
 	    //P6DIR = 0xF8; 	// P6.0, P6.1, P6.2, P6.3, P6.4 Inputs, All others Outputs
 

@@ -46,5 +46,6 @@ extern unsigned int pulseDur; 			// units of milliseconds
 extern unsigned int pulseInt; 	// units of DAC counts (0 to 4095)
 extern volatile Calendar on_Times[7],offTimes[7];
 extern int numAlarms;
+extern volatile Calendar currentTime;
 
 #endif /* MAIN_H_ */

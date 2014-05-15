@@ -9,6 +9,8 @@
 #define CALIBRATEMODE_H_
 
 void calFlash(unsigned int irrad, unsigned int duration);
+void checkLEDCurrent(void);
+unsigned int checkBattery(void);
 
 extern unsigned int calLeft, calRight; 	// Irradiance calibration milliWatts/m^2 per DAC count
 

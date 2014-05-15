@@ -11,14 +11,15 @@
 #include "main.h"
 #include "flashMemory.h"
 #include "calibrateMode.h"
+#include "timers.h"
 
-#define INFO_D_SEGMENT_ADDR 0x001800
+unsigned char* flashAddressLEDCurrent;
 
-// Write an unsigned integer to flash memory
+// Write an unsigned integer to flash memory Info D segment
 void flashWriteUnsignedInt(unsigned int position, unsigned int data){
 	unsigned short bGIE;
 	int i;
-	unsigned char prevData[128];
+	static unsigned char prevData[128];
 	unsigned char* flashAddr = (unsigned char*)INFO_D_SEGMENT_ADDR;
 
 	// Read the segment to preserve segment data
@@ -56,7 +57,7 @@ void flashWriteUnsignedInt(unsigned int position, unsigned int data){
 void flashWriteAlarm(unsigned int position, Calendar data){
 	unsigned short bGIE;
 	int i;
-	unsigned char prevData[128];
+	static unsigned char prevData[128];
 	unsigned char* flashAddr = (unsigned char*)INFO_D_SEGMENT_ADDR;
 
 	// Read the segment to preserve segment data
@@ -103,7 +104,7 @@ void flashWriteAlarm(unsigned int position, Calendar data){
 // Initialize parameters and alarms from info flash (segment D)
 void initFromFlash(void){
 	int i;
-	unsigned char data[128];
+	static unsigned char data[128];
 	unsigned char* flashAddr = (unsigned char*)INFO_D_SEGMENT_ADDR;
 
 	// Read the segment
@@ -132,3 +133,95 @@ void initFromFlash(void){
 	}
 	numAlarms = (unsigned int)(data[122]);
 }
+
+// Write an bytes to flash memory MAIN_BANK_B_
+void flashWriteDataBankB(unsigned char data[], int length){
+	unsigned short bGIE;
+	int i;
+
+	if(flashAddressLEDCurrent < (unsigned char*)MAX_RECORD_ADDRESS){
+
+		bGIE  = (__get_SR_register() & GIE);  //save interrupt status
+		__disable_interrupt();
+		// Write the data to the segment
+		FCTL3 = FWKEY;                            // Clear the lock bit
+		FCTL1 = FWKEY+WRT;                        // Set WRT bit for write operation
+		for (i=0;i<length;i++){
+			*flashAddressLEDCurrent++ = data[i];                 // Write data to flash
+		}
+		FCTL1 = FWKEY;                            // Clear WRT bit
+		FCTL3 = FWKEY+LOCK;                       // Set LOCK bit
+
+		__bis_SR_register(bGIE); //restore interrupt status
+	}
+}
+
+// Erase flash main memory bank B
+void flashEraseBankB(void){
+	unsigned short bGIE;
+	unsigned char* flashAddr;
+
+	//wdReset_1000();
+	wdOff();
+
+	bGIE  = (__get_SR_register() & GIE);  //save interrupt status
+	__disable_interrupt();
+
+	while(BUSY & FCTL3){;                     // Check for busy flash
+
+	}
+	// Erase the segment
+	flashAddr = (unsigned char*)MAIN_BANK_C_ADDR;
+	FCTL3 = FWKEY;                            // Clear the lock bit
+	FCTL1 = FWKEY+MERAS;                      // Set the mass erase bit to erase the whole bank
+	*flashAddr = 0;                           // Dummy write, to erase the segment
+
+	while(BUSY & FCTL3);                     // Check for erase completion
+
+	//FCTL1 = FWKEY;                            // Clear WRT bit
+	FCTL3 = FWKEY+LOCK;                       // Set LOCK bit
+	wdReset_1000();
+
+	__bis_SR_register(bGIE); //restore interrupt status
+
+	flashAddressLEDCurrent = (unsigned char*)MAIN_BANK_C_ADDR; // reset memory location to start of main bank B
+}
+
+// Find next unused flash address in main bank B after reset
+void findNextAddrBankB(void){
+	int found = 0;
+	static unsigned char value = 0, valuelow = 0;
+	static long int lowAddr = MAIN_BANK_C_ADDR, highAddr = MAX_RECORD_ADDRESS;
+	//static long int lowAddr = 0x00C400, highAddr = 0x0143FF;
+	static long int flashAddress;
+
+	lowAddr =  MAIN_BANK_C_ADDR;
+	highAddr = MAX_RECORD_ADDRESS;
+	while(!found) {
+		wdReset_1000();
+		flashAddress = 8*((lowAddr + highAddr)/16); // round average down to multiple of 8 so flashAddress is always at the start of a record
+		valuelow = *(unsigned char*)flashAddress;
+		value = *(unsigned char*)(flashAddress+8);
+		if((value == 255) && (valuelow != 255)) {
+			found = 1;
+			flashAddress += 8;
+		}
+		else if((value == 255) && (flashAddress > MAIN_BANK_C_ADDR)) {
+			highAddr = flashAddress;
+		}
+		else if(flashAddress <= MAIN_BANK_C_ADDR) {
+			flashAddress = MAIN_BANK_C_ADDR;
+			found = 1;
+		}
+		else if(flashAddress >= MAX_RECORD_ADDRESS - 8){
+			flashAddress = MAX_RECORD_ADDRESS;
+			found = 1;
+		}
+		else {
+			lowAddr = flashAddress;
+		}
+	}
+	//if(flashAddress!=MAIN_BANK_B_ADDR) flashAddress += 8;
+	flashAddressLEDCurrent = (unsigned char*)flashAddress;
+}
+
