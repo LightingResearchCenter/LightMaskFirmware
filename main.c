@@ -1,5 +1,5 @@
 // firmware code for NIH Light Mask Controller
-// Andrew Bierman
+// Andrew Bierman 22-Jan-2015
 // November 16, 2012; Revised February 14, 2013
 // Revised May 01, 2013 Fixed getCalRight command (was calLeft for both sides) line 435
 
@@ -8,6 +8,9 @@
 // Added LED current monitoring and saving to MSP430 flash
 //   Added functions that read ADC and saves results, along with date-time stamps, to flash memory
 //   Added function that erases block C of flash
+//
+// 26-Jun-2014 Revision: Added '#End of log#' text at the end of LED current log (lines 515-519)
+// 		Added time delay of 10 ms between each log record transmit
 
 #include "USB_API/USB_Common/device.h"
 #include "USB_API/USB_Common/types.h"
@@ -509,6 +512,12 @@ void main(void) {
 	                		    for(j=0;j<MAX_STR_LENGTH;j++){    // Clear the string in preparation for the next one
 	                		        outString[j] = 0x00;
 	                		     }
+	                		    tbDelay(10);
+	                		}
+	                		strcpy(outString,"# End of Log #\r\n");
+	                		hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
+	                		for(j=0;j<MAX_STR_LENGTH;j++){    // Clear the string in preparation for the next one
+	                			outString[j] = 0x00;
 	                		}
 	                		break;
 	                	}
