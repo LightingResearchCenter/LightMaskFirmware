@@ -26,8 +26,14 @@ MEMORY
     RAM                     : origin = 0x2400, length = 0x2000
     INFOA                   : origin = 0x1980, length = 0x0080
     INFOB                   : origin = 0x1900, length = 0x0080
-    INFOC                   : origin = 0x1880, length = 0x0080
-    INFOD                   : origin = 0x1800, length = 0x0080
+//    INFOC                   : origin = 0x1880, length = 0x0080
+    INFOC00                 : origin = 0x1880, length = 0x000A
+    INFOC0A                 : origin = 0x188A, length = 0x0070
+    INFOC7A                 : origin = 0x18FA, length = 0x0006
+//    INFOD                   : origin = 0x1800, length = 0x0080
+    INFOD00                 : origin = 0x1800, length = 0x000A
+    INFOD0A                 : origin = 0x180A, length = 0x0070
+    INFOD7A                 : origin = 0x187A, length = 0x0006
     FLASH                   : origin = 0x4400, length = 0xBB80
     FLASH2                  : origin = 0x10000,length = 0x14400
     INT00                   : origin = 0xFF80, length = 0x0002
@@ -120,8 +126,14 @@ SECTIONS
 
     .infoA     : {} > INFOA              /* MSP430 INFO FLASH MEMORY SEGMENTS */
     .infoB     : {} > INFOB
-    .infoC     : {} > INFOC
-    .infoD     : {} > INFOD
+//    .infoC     : {} > INFOC
+	.infoC00    : {} > INFOC00
+	.infoC0A    : {} > INFOC0A
+	.infoC7A    : {} > INFOC7A
+//    .infoD     : {} > INFOD
+    .infoD00    : {} > INFOD00
+    .infoD0A    : {} > INFOD0A
+    .infoD7A    : {} > INFOD7A
 
     .int00   : {} > INT00                /* MSP430 INTERRUPT VECTORS          */
     .int01   : {} > INT01

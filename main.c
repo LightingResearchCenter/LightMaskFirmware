@@ -1,5 +1,5 @@
 // firmware code for NIH Light Mask Controller
-// Andrew Bierman 22-Jan-2015
+// Andrew Bierman
 // November 16, 2012; Revised February 14, 2013
 // Revised May 01, 2013 Fixed getCalRight command (was calLeft for both sides) line 435
 
@@ -11,6 +11,17 @@
 //
 // 26-Jun-2014 Revision: Added '#End of log#' text at the end of LED current log (lines 515-519)
 // 		Added time delay of 10 ms between each log record transmit
+//
+// 23-Jan-2015 Revision: Corrected infinite loop in findNextAddrBankB(void) when current log is full
+// 		and added loop counter in while conditional to ensure it stops.
+//      Changed #pragma command that assigns constants to information memory, and edited lnk_msp430f5528.cmd accordingly.
+//          Defined memory locations .infoD00, .infoD0A, and .infoD7A and removed .infoD
+//          Defined memory locations .infoC00, .infoC0A, and .infoC7A and removed .infoC
+//          Changed to using information memory C instead of D becasue of possibly stressing flash D when
+//             programming device without erasing emeory. Must erase both main and information memory
+//             when programming. This resolves why chips would be difficult to program and not verify.
+//      Fixed initFromFlash() so it now uses the correct byte order when determining values from flash
+//      Added initNumAlarms to flash initialization.
 
 #include "USB_API/USB_Common/device.h"
 #include "USB_API/USB_Common/types.h"
@@ -42,7 +53,7 @@ volatile BYTE bHIDDataReceived_event = FALSE; // Indicates data has been receive
 volatile Calendar currentTime,alarmTime;
 volatile Calendar on_Times[7],offTimes[7]; // **** change type to constant to store in non-volatile flash *****
 volatile Alarm nextAlarm;
-int numAlarms = 3,armed = 1;
+int numAlarms = 3, armed = 1;
 unsigned int pulseRep = 5; 		// units of seconds
 unsigned int pulseDur = 900; 	// units of milliseconds
 unsigned int pulseInt = 50; 	// units of W/m^2 (1 W/m^2 roughly = 4 DAC counts (0 to 4095)
@@ -54,9 +65,11 @@ int batteryEventFlag = 0; 	// Battery interrupt on P1.3
 
 
 // Initialize segment D flash with on_Times and offTimes
-#pragma DATA_SECTION (initParam, "INFO_SEGMENT_D1");
-const unsigned int initParam[5] = {900, 50, 10, 262, 262};
-#pragma DATA_SECTION (initTimes, "INFO_SEGMENT_D2");
+//#pragma DATA_SECTION (initParam, "INFO_SEGMENT_D1");
+#pragma DATA_SECTION (initParam, ".infoC00");
+const unsigned int initParam[5] = {2000, 225, 30, 262, 262};
+//#pragma DATA_SECTION (initTimes, "INFO_SEGMENT_D2");
+#pragma DATA_SECTION (initTimes, ".infoC0A");
 const Calendar initTimes[14] =  {{0,1,12,0,7,1,2013},
 								 {0,3,12,0,7,1,2013},
 								 {0,5,12,0,7,1,2013},
@@ -71,6 +84,8 @@ const Calendar initTimes[14] =  {{0,1,12,0,7,1,2013},
 								 {0,10,12,0,7,1,2013},
 								 {0,12,12,0,7,1,2013},
 								 {0,14,12,0,7,1,2013}};
+#pragma DATA_SECTION (initNumAlarms, ".infoC7A");
+const int initNumAlarms = 3;
 
 
 void main(void) {

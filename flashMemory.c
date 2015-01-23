@@ -5,6 +5,9 @@
  *      Author: bierma2
  *  Revised on June 20, 2013
  *  	Author: Andrew Bierman
+ *  Revised on: Jan 23, 2014
+ *  	Author: Andrew Bierman
+ *  	findNextAddrBankB(void) was corrected (line 218) and added loop counter to while loop conditional
  */
 
 #include "msp430.h"
@@ -111,25 +114,25 @@ void initFromFlash(void){
 	for (i=0;i<128;i++){
 		data[i] = *flashAddr++;
 	}
-	pulseDur = (unsigned int)(data[1] + 256*data[0]);
-	pulseInt = (unsigned int)(data[3] + 256*data[2]);
-	pulseRep = (unsigned int)(data[5] + 256*data[4]);
-	calLeft  = (unsigned int)(data[7] + 256*data[6]);
-	calRight = (unsigned int)(data[9] + 256*data[8]);
+	pulseDur = (unsigned int)(data[0] + 256*data[1]);
+	pulseInt = (unsigned int)(data[2] + 256*data[3]);
+	pulseRep = (unsigned int)(data[4] + 256*data[5]);
+	calLeft  = (unsigned int)(data[6] + 256*data[7]);
+	calRight = (unsigned int)(data[8] + 256*data[9]);
 	for (i=0;i<7;i++){
 		on_Times[i].Seconds = data[i*8 + 10 + 0];
 		on_Times[i].Minutes = data[i*8 + 10 + 1];
 		on_Times[i].Hours = data[i*8 + 10 + 2];
 		on_Times[i].DayOfMonth = data[i*8 + 10 + 4];
 		on_Times[i].Month = data[i*8 + 10 + 5];
-		on_Times[i].Year = data[i*8 + 10 + 7] + 256*data[i*8 + 10 + 6];
+		on_Times[i].Year = 256*data[i*8 + 10 + 7] + data[i*8 + 10 + 6];
 
 		offTimes[i].Seconds = data[i*8 + 66 + 0];  // 10 + (7*8) = 66
 		offTimes[i].Minutes = data[i*8 + 66 + 1];
 		offTimes[i].Hours = data[i*8 + 66 + 2];
 		offTimes[i].DayOfMonth = data[i*8 + 66 + 4];
 		offTimes[i].Month = data[i*8 + 66 + 5];
-		offTimes[i].Year = data[i*8 + 66 + 7] + 256*data[i*8 + 66 + 6];
+		offTimes[i].Year = 256*data[i*8 + 66 + 7] + data[i*8 + 66 + 6];
 	}
 	numAlarms = (unsigned int)(data[122]);
 }
@@ -189,7 +192,7 @@ void flashEraseBankB(void){
 
 // Find next unused flash address in main bank B after reset
 void findNextAddrBankB(void){
-	int found = 0;
+	int count,found = 0;
 	static unsigned char value = 0, valuelow = 0;
 	static long int lowAddr = MAIN_BANK_C_ADDR, highAddr = MAX_RECORD_ADDRESS;
 	//static long int lowAddr = 0x00C400, highAddr = 0x0143FF;
@@ -197,7 +200,9 @@ void findNextAddrBankB(void){
 
 	lowAddr =  MAIN_BANK_C_ADDR;
 	highAddr = MAX_RECORD_ADDRESS;
-	while(!found) {
+	count = 0;
+	while(!found && count<20) { 	// maximum count is 12 (2^12 = 4096 = max records, so 12 is max iteration in bisection search algorithm
+		count += 1;
 		wdReset_1000();
 		flashAddress = 8*((lowAddr + highAddr)/16); // round average down to multiple of 8 so flashAddress is always at the start of a record
 		valuelow = *(unsigned char*)flashAddress;
@@ -213,7 +218,7 @@ void findNextAddrBankB(void){
 			flashAddress = MAIN_BANK_C_ADDR;
 			found = 1;
 		}
-		else if(flashAddress >= MAX_RECORD_ADDRESS - 8){
+		else if(flashAddress >= MAX_RECORD_ADDRESS - 16){ 	// corrected 23Jan2015, previously was MAX_RECORD_ADDRESS - 8
 			flashAddress = MAX_RECORD_ADDRESS;
 			found = 1;
 		}
@@ -222,6 +227,7 @@ void findNextAddrBankB(void){
 		}
 	}
 	//if(flashAddress!=MAIN_BANK_B_ADDR) flashAddress += 8;
+	if(count==20) flashAddress = MAX_RECORD_ADDRESS;
 	flashAddressLEDCurrent = (unsigned char*)flashAddress;
 }
 

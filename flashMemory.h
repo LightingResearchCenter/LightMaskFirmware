@@ -8,7 +8,8 @@
 #ifndef FLASHMEMORY_H_
 #define FLASHMEMORY_H_
 
-#define INFO_D_SEGMENT_ADDR 0x001800
+//#define INFO_D_SEGMENT_ADDR 0x001800
+#define INFO_D_SEGMENT_ADDR 0x001880    // Using address for info C segment, must match pragma init in main.c
 #define MAIN_BANK_C_ADDR 0x014400
 #define MAX_RECORD_ADDRESS 0x01C3FF
 
