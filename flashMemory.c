@@ -219,7 +219,8 @@ void findNextAddrBankB(void){
 			found = 1;
 		}
 		else if(flashAddress >= MAX_RECORD_ADDRESS - 16){ 	// corrected 23Jan2015, previously was MAX_RECORD_ADDRESS - 8
-			flashAddress = MAX_RECORD_ADDRESS;
+			if(value!=255) flashAddress = MAX_RECORD_ADDRESS;
+			else flashAddress = MAX_RECORD_ADDRESS - 8;
 			found = 1;
 		}
 		else {
