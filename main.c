@@ -495,7 +495,8 @@ void main(void) {
 	                    	break;
 	                    }
 	                	if(!(strcmp(subStr, "getLEDCurrentLog"))){
-	                		n = (int)((long int)flashAddressLEDCurrent - MAIN_BANK_C_ADDR)/8;
+	                		n = (int)(((long int)flashAddressLEDCurrent - MAIN_BANK_C_ADDR)/8);
+	                		if((long int)flashAddressLEDCurrent==MAX_RECORD_ADDRESS) n++; // add one if memory bank is completely full
 	                		static unsigned char* flashAddr = (unsigned char*)MAIN_BANK_C_ADDR;
 	                		flashAddr = (unsigned char*)MAIN_BANK_C_ADDR;
 	                		static unsigned int* flashAddrInt;
