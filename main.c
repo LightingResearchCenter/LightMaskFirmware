@@ -22,6 +22,14 @@
 //             when programming. This resolves why chips would be difficult to program and not verify.
 //      Fixed initFromFlash() so it now uses the correct byte order when determining values from flash
 //      Added initNumAlarms to flash initialization.
+//
+// 10-Feb-2015 Revision: Corrected byte ordering when saving parameters to flash (flashMemory.c, lines 38-30)
+
+/*
+ *****************************************************************
+ * Change Mask ID number and Firmware version on lines 99 and 101
+ * ***************************************************************
+ */
 
 #include "USB_API/USB_Common/device.h"
 #include "USB_API/USB_Common/types.h"
@@ -86,6 +94,11 @@ const Calendar initTimes[14] =  {{0,1,12,0,7,1,2013},
 								 {0,14,12,0,7,1,2013}};
 #pragma DATA_SECTION (initNumAlarms, ".infoC7A");
 const int initNumAlarms = 3;
+
+#pragma DATA_SECTION (maskID, ".infoD00");
+const char maskID[10] = "B001";
+#pragma DATA_SECTION (FirmwareVersion, ".infoD0A");
+const char FirmwareVersion[32] = "Rev1_10Feb2015";
 
 
 void main(void) {
@@ -550,6 +563,20 @@ void main(void) {
 	                		strcpy(outString,"\r\nBattery voltage = ");
 	                		strcat(outString,parameterStr);
 	                		strcat(outString," (mV)\r\n");
+	                		hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
+	                		break;
+	                	}
+	                	if(!(strcmp(subStr, "getID"))){
+	                		strcpy(outString,"\r\nMask ID\r\n");
+	                		strcat(outString,maskID);
+	                		strcat(outString,"\r\n");
+	                		hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
+	                		break;
+	                	}
+	                	if(!(strcmp(subStr, "getFirmwareVer"))){
+	                		strcpy(outString,"\r\nFirmware Version\r\n");
+	                		strcat(outString,FirmwareVersion);
+	                		strcat(outString,"\r\n");
 	                		hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
 	                		break;
 	                	}

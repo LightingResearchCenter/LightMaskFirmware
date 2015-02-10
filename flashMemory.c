@@ -8,7 +8,10 @@
  *  Revised on: Jan 23, 2014
  *  	Author: Andrew Bierman
  *  	findNextAddrBankB(void) was corrected (line 218) and added loop counter to while loop conditional
- */
+ *  Revised on: Feb 09, 2015
+*      Author: Andrew Bierman
+*      Reversed byte ordering when writing unsigned int to flash in flashWriteUnsignedInt() (lines 36-37)
+*/
 
 #include "msp430.h"
 #include "main.h"
@@ -31,8 +34,8 @@ void flashWriteUnsignedInt(unsigned int position, unsigned int data){
 	}
 	// Update data with new unsigned integer
 	// Multiply position by 2 because integers saved are 2 bytes each, offset is zero for saved integers
-	prevData[(position*2)] = (unsigned char)(data>>8); 	// High byte
-	prevData[(position*2 + 1)] = (unsigned char)data; 	// Low byte
+	prevData[(position*2)] = (unsigned char)data;; 	// Low byte   Corrected 10Feb2015
+	prevData[(position*2 + 1)] = (unsigned char)(data>>8); 	// High byte
 
 	// Write data back to flash
 	bGIE  = (__get_SR_register() & GIE);  //save interrupt status
