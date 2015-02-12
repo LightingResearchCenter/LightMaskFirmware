@@ -96,7 +96,7 @@ const Calendar initTimes[14] =  {{0,1,12,0,7,1,2013},
 const int initNumAlarms = 3;
 
 #pragma DATA_SECTION (maskID, ".infoD00");
-const char maskID[10] = "B001";
+const char maskID[10] = "B023";
 #pragma DATA_SECTION (FirmwareVersion, ".infoD0A");
 const char FirmwareVersion[32] = "Rev1_10Feb2015";
 
