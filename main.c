@@ -24,10 +24,21 @@
 //      Added initNumAlarms to flash initialization.
 //
 // 10-Feb-2015 Revision: Corrected byte ordering when saving parameters to flash (flashMemory.c, lines 38-30)
-
+//
+// 15-Feb-2015 Revision: USB_handleVbusOnEvent ()
+//			reset outputFlag and flashFlag to zero
+// 			swapped order of writing zero to DAC and stopping timerA
+//
+// 05-Mar-2015 Revision: Stop setting on-alarms for alarm index > numAlarms
+//			Added confitional to RTC_ISR() (RTC interrupt routine) (lines 1019-1023) case 6 when alarm type = 0
+// 20-Mar-2015 Revisions:
+//				Set RTC to specific default time (01-Jan-2014 00:00) after reset
+//				Add getNumAlarms command
+//				In RTC interrupt routine (RTC_ISR()), disabled alarms if alarmIndex >= numAlarms to prevent alarm repeating every month
+// 23-Mar-2015 Revision: Changed conditional in RTC interrupt when programming next on alarm to if(nextAlarm.index < (numAlarms - 1)) from if(nextAlarm.index<numalarms)
 /*
  *****************************************************************
- * Change Mask ID number and Firmware version on lines 99 and 101
+ * Change Mask ID number and Firmware version on lines 109 and 111
  * ***************************************************************
  */
 
@@ -96,9 +107,9 @@ const Calendar initTimes[14] =  {{0,1,12,0,7,1,2013},
 const int initNumAlarms = 3;
 
 #pragma DATA_SECTION (maskID, ".infoD00");
-const char maskID[10] = "B023";
+const char maskID[10] = "R014";
 #pragma DATA_SECTION (FirmwareVersion, ".infoD0A");
-const char FirmwareVersion[32] = "Rev1_10Feb2015";
+const char FirmwareVersion[32] = "Rev1_23Mar2015";
 
 
 void main(void) {
@@ -118,7 +129,7 @@ void main(void) {
 
 	Init_StartUp();     	// Initialize clocks, power, I/Os
 	currentTime = RTC_getCalendarTime();
-	setRTC(); 				// Setup the RTC, Set time to currentTime. Commented-out temporary time set for testing
+	setRTC(); 				// Setup the RTC, Set time to default time. Commented-out temporary time set for testing
 	//Init_Alarm(); 			// Initialize array of alarm times ***** Remove/change so that updated alarm values are used ****
 	initFromFlash(); 		// Initialize parameters and alarm times from info flash (segment D)
 	findNextAddrBankB(); 	// Find flash memory location where next LED current measure is saved
@@ -580,6 +591,15 @@ void main(void) {
 	                		hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
 	                		break;
 	                	}
+	                	if(!(strcmp(subStr, "getNumAlarms"))){
+	                		if(numAlarms>=0) num2ASCII(numAlarms,parameterStr,2);
+	                		else strcpy(parameterStr,"0");
+	                		strcpy(outString,"\r\nNumber of Alarms = ");
+	                		strcat(outString,parameterStr);
+	                		strcat(outString,"\r\n");
+	                		hidSendDataWaitTilDone((BYTE*)outString,strlen(outString),HID0_INTFNUM,1000000);
+	                		break;
+	                	}
 	                	// Handle other terminated strings
 	                	strcpy(outString,"\r\nNo such command!\r\n\r\n");                   // Prepare the outgoing string
 	                	hidSendDataInBackground((BYTE*)outString,strlen(outString),0,0);    // Send the response over USB
@@ -874,16 +894,14 @@ Alarm findNextOnAlarmIndex(int numTimes){
 	return nextAlarm;
 }
 
-// Temporarily set RTC time
+// Set RTC time to default time (01-Jan-2014)
 void setRTC(void){
-	/*
-	currentTime.Year = 2013;
-	currentTime.Month = 2;
-	currentTime.DayOfMonth = 11;
-	currentTime.Hours = 13;
-	currentTime.Minutes = 24;
-	currentTime.Seconds = 50;
-	*/
+	currentTime.Year = 2014;
+	currentTime.Month = 1;
+	currentTime.DayOfMonth = 1;
+	currentTime.Hours = 0;
+	currentTime.Minutes = 0;
+	currentTime.Seconds = 0;
 	RTC_calendarInit(currentTime);
 	RTC_startClock();
 }
@@ -1010,9 +1028,19 @@ __interrupt void RTC_ISR (void)
         			//LPM3_EXIT;
         		}
         		else{
-        			nextAlarm.type = 1; 	// next alarm lights on
-        			nextAlarm.index++;
-        			setAlarm(nextAlarm);
+        			if(nextAlarm.index < (numAlarms - 1)){
+        				nextAlarm.type = 1; 	// next alarm lights on
+        				nextAlarm.index++;
+        				setAlarm(nextAlarm);
+        			}
+        			else{
+        				RTCCTL0 &= ~RTCAIE; 	// disable alarm interrupt
+        				RTCCTL0 &= ~RTCAIFG; 	// clear alarm interrupt flag
+        				RTCAMIN = 0x00; 		// disable each alarm (and clear alarm times)
+        				RTCAHOUR = 0x00;
+        				RTCADAY = 0x00;
+        				RTCADOW = 0x00;
+        			}
         			outputFlag = 0;
         			flashFlag = 0;
         			//taStop(); 	// Stopping timerA prevents LED turning on because that happens in timerA interrupt routine

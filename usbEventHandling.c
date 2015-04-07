@@ -33,6 +33,11 @@
  * ======== usbEventHandling.c ========
  * Event-handling placeholder functions.
  * All functios are called in interrupt context.
+ *
+ * Revised by A. Bierman 27-Feb-2105
+ * 		USB_handleVbusOnEvent ()
+ * 			reset flashFlag to zero
+ * 			swapped order of writing zero to DAC and stopping timerA
  */
 
 #include "USB_API/USB_Common/device.h"
@@ -86,8 +91,9 @@ BYTE USB_handleVbusOnEvent ()
 	unsigned int i,j;
 
 	P1OUT &= ~0x01; 			// turn off LED on port 1.0
+	flashFlag = 0;
+	taStop() ; 		// Stop timerA
 	writeDAC(0); 	// turn LED mask off by programming DAC to zero
-	taStop() ; 		// Stop timerA and disable its interrupt
 	USBtiming = 1; 	// Use LPM0 for sleeping
 	batterySwitchIdle(1); 	// Switch on battery and wait for DACs to initialize
 	for(j=0;j<5;j++){
